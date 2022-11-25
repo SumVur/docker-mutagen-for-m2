@@ -1,0 +1,54 @@
+# Set up the Docker Compose services before creating sessions.
+beforeCreate:
+  - docker-compose up --detach
+
+# Stop the Docker Compose services after terminating sessions.
+afterTerminate:
+  - docker-compose stop
+
+# Define common utility commands.
+commands:
+  setup: >
+    docker-compose exec redis redis-cli FLUSHALL;
+    docker-compose exec php composer install --no-interaction;
+    docker-compose exec php bin/magento setup:upgrade;
+  flushall: >
+    docker-compose exec redis redis-cli FLUSHALL;
+    docker-compose exec varnish varnishadm "ban req.url ~ /";
+    docker-compose exec php php bin/magento cache:flush;
+
+sync:
+  defaults:
+    mode: "two-way-resolved"
+    stageMode: "neighboring"
+    maxStagingFileSize: "100 MB"
+    symlink:
+      mode: "posix-raw"
+    ignore:
+      vcs: true
+      paths:
+        # System files
+        - ".DS_Store"
+        - "._*"
+        # Vim files
+        - "*~"
+        - "*.sw[a-p]"
+        # IDE files
+        - ".idea/"
+        # Magento files
+        - "/.docker/"
+        - "/.magento/"
+        - "/.github/"
+        - "node_modules/"
+        - "/pub/media/"
+        - "!/pub/media/.htaccess"
+        - "/pub/static/**"
+        - "!/pub/static/.htaccess"
+        - "/var/"
+        - "!/var/.htaccess"
+    permissions:
+      defaultFileMode: "0644"
+      defaultDirectoryMode: "0755"
+  m2project:
+    alpha: "../"
+    beta: "docker://m2project-php-1/var/www/html"

@@ -1,0 +1,91 @@
+version: "3.4"
+
+volumes:
+  m2data:
+  dbdata:
+  esdata:
+
+services:
+  proxy:
+    image: nginx:1
+    ports:
+      - 80:80
+      - 443:443
+    volumes:
+      - ./configs/nginx/certs:/etc/nginx/certs:ro
+      - ./configs/nginx/proxy.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - varnish
+
+  varnish:
+    image: varnish:6
+    volumes:
+      - ./configs/varnish/magento.vcl:/etc/varnish/default.vcl:ro
+    depends_on:
+      - default_backend
+      - xdebug_backend
+
+  default_backend:
+    image: nginx:1
+    volumes:
+      - ./configs/nginx/magento.conf:/etc/nginx/conf.d/default.conf:ro
+      - m2data:/var/www/html:cached
+    depends_on:
+      - php
+
+  xdebug_backend:
+    image: nginx:1
+    volumes:
+      - ./configs/nginx/magento.conf:/etc/nginx/conf.d/default.conf:ro
+      - m2data:/var/www/html:cached
+    depends_on:
+      - xdebug
+
+  php:
+    build: ./images/php
+    user: www-data
+    volumes:
+      - ~/.composer/cache:/var/www/.composer/cache:cached
+      - ~/.ssh:/var/www/.ssh:ro
+      - ./configs/php/php.ini:/usr/local/etc/php/conf.d/docker-php.ini:ro
+      - ../.git:/var/www/html/.git:cached
+      - m2data:/var/www/html:cached
+
+  xdebug:
+    build: ./images/php
+    user: www-data
+    volumes:
+      - ~/.composer/cache:/var/www/.composer/cache:cached
+      - ~/.ssh:/var/www/.ssh:ro
+      - ./configs/php/php.ini:/usr/local/etc/php/conf.d/docker-php.ini:ro
+      - ./configs/php/xdebug.ini:/usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini:ro
+      - ../.git:/var/www/html/.git:cached
+      - m2data:/var/www/html:cached
+
+  database:
+    image: mariadb:10.4
+    ports:
+      - 3306:3306
+    environment:
+      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_DATABASE=magento
+    volumes:
+      - ./configs/mysql/my.cnf:/etc/mysql/conf.d/my.cnf:ro
+      - dbdata:/var/lib/mysql:cached
+
+  redis:
+    image: redis:6.0
+
+  elasticsearch:
+    build: ./images/elasticsearch
+    volumes:
+      - esdata:/usr/share/elasticsearch/data
+    environment:
+      - cluster.routing.allocation.disk.threshold_enabled=false
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+
+  mailhog:
+    image: mailhog/mailhog
+    ports:
+      - 8025:8025
